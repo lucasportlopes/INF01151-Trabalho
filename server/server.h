@@ -23,10 +23,7 @@ private:
     int n;
     
 public:
-    // Construtor
     Server();
-    
-    // Destrutor
     ~Server();
     
     bool start();           // Inicializa o servidor (cria socket e faz bind)

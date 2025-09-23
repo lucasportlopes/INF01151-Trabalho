@@ -25,10 +25,7 @@ private:
     char buffer[256];
     
 public:
-    // Construtor
     Client();
-    
-    // Destrutor
     ~Client();
     
     bool connect(const char* hostname);     // Conecta ao servidor
