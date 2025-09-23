@@ -8,8 +8,8 @@ SRC_DIR_CLIENT = client
 BUILD_DIR = build
 
 # Arquivos fonte
-SERVER_SRC = $(SRC_DIR_SERVER)/main.cpp
-CLIENT_SRC = $(SRC_DIR_CLIENT)/main.cpp
+SERVER_SRC = $(SRC_DIR_SERVER)/main.cpp $(SRC_DIR_SERVER)/server.cpp
+CLIENT_SRC = $(SRC_DIR_CLIENT)/main.cpp $(SRC_DIR_CLIENT)/client.cpp
 
 # Executáveis
 SERVER_BIN = $(BUILD_DIR)/server
@@ -20,11 +20,11 @@ all: $(SERVER_BIN) $(CLIENT_BIN)
 
 # Compilação do servidor
 $(SERVER_BIN): $(SERVER_SRC) | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -o $@ $<
+	$(CXX) $(CXXFLAGS) -o $@ $(SERVER_SRC)
 
 # Compilação do cliente
 $(CLIENT_BIN): $(CLIENT_SRC) | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -o $@ $<
+	$(CXX) $(CXXFLAGS) -o $@ $(CLIENT_SRC)
 
 # Criar diretório de build se não existir
 $(BUILD_DIR):
