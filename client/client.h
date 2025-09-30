@@ -15,6 +15,13 @@
 
 #define BUF_SIZE 256
 
+enum packet_type {
+  DESC,
+  REQ,
+  DESC_ACK,
+  REQ_ACK
+};
+
 struct requisicao {
     uint32_t dest_addr; // Endereço IP do cliente destino
     uint32_t value; // Valor da transferência
@@ -26,7 +33,7 @@ struct requisicao_ack {
 };
 
 typedef struct {
-    uint16_t type; // Tipo do pacote (DESC | REQ | DESC_ACK | REQ_ACK )
+    enum packet_type type; // Tipo do pacote (DESC | REQ | DESC_ACK | REQ_ACK )
     uint32_t seqn; // Número de sequência de uma requisição
     union {
         struct requisicao req;

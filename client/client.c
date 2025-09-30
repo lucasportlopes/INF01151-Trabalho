@@ -8,9 +8,9 @@ int main(int argc, char *argv[]){
     int porta = atoi(argv[1]);
 
     int sock;
-    struct sockaddr_in broadcast_addr, recv_addr;
+    struct sockaddr_in broadcast_addr, srv_addr;
     char buffer[BUF_SIZE];
-    socklen_t addr_len = sizeof(recv_addr);
+    socklen_t addr_len = sizeof(srv_addr);
 
     // Create UDP socket
     if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -34,27 +34,27 @@ int main(int argc, char *argv[]){
     broadcast_addr.sin_addr.s_addr = htonl(INADDR_BROADCAST);
 
     // Send broadcast message
-    const char *msg = "DISCOVER_SERVER";
-    if (sendto(sock, msg, strlen(msg), 0,
-               (struct sockaddr *)&broadcast_addr, sizeof(broadcast_addr)) < 0) {
+    packet msg;
+    msg.type = DESC;
+    msg.seqn = 0;
+
+    if (sendto(sock, &msg, sizeof(msg), 0, (struct sockaddr *)&broadcast_addr, sizeof(broadcast_addr)) < 0) {
         perror("sendto failed");
         close(sock);
         exit(1);
     }
-    printf("Broadcast message sent: %s\n", msg);
+    printf("Broadcast discovery msg sent");
 
-    // Receive server reply
-    int n = recvfrom(sock, buffer, BUF_SIZE - 1, 0,
-                     (struct sockaddr *)&recv_addr, &addr_len);
+    int n = recvfrom(sock, buffer, BUF_SIZE - 1, 0, (struct sockaddr *)&srv_addr, &addr_len);
     if (n < 0) {
         perror("recvfrom failed");
         close(sock);
         exit(1);
     }
+
     buffer[n] = '\0';
 
-    printf("Received reply from %s: %s\n",
-           inet_ntoa(recv_addr.sin_addr), buffer);
+    printf("Received reply from %s: %s\n", inet_ntoa(srv_addr.sin_addr), buffer);
 
     close(sock);
     return 0;
