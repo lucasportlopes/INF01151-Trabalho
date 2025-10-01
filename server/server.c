@@ -1,4 +1,5 @@
 #include "server.h"
+#include "server_discovery.h"
 
 int main(int argc, char *argv[]) {
     if(argc!=2) {
@@ -7,7 +8,7 @@ int main(int argc, char *argv[]) {
     }
     int port = atoi(argv[1]);
     int sockfd;
-    struct sockaddr_in server_addr, client_addr, local_addr;
+    struct sockaddr_in server_addr, client_addr;
     socklen_t addr_len = sizeof(client_addr);
     packet msg;
 
@@ -39,20 +40,7 @@ int main(int argc, char *argv[]) {
         }
 
         if (msg.type == DESC) {
-            printf("Received broadcast msg from %s:%d\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
-
-            socklen_t local_len = sizeof(local_addr);
-            if (getsockname(sockfd, (struct sockaddr*)&local_addr, &local_len) == -1) {
-                perror("getsockname"); close(sockfd); exit(1);
-            }
-
-            char ipstr[INET_ADDRSTRLEN];
-            inet_ntop(AF_INET, &local_addr.sin_addr, ipstr, sizeof(ipstr));
-
-            // Send unicast reply back to client
-            sendto(sockfd, ipstr, strlen(ipstr), 0, (struct sockaddr *)&client_addr, addr_len);
-
-            printf("Sent reply: '%s'\n", ipstr);
+            handle_discovery(sockfd, &client_addr);
         }
     }
 
