@@ -3,7 +3,7 @@
 int discover_server(int sockfd, int port, struct sockaddr_in *srv_addr, socklen_t addr_len)
 {
     struct sockaddr_in broadcast_addr;
-    char server_addr[22];
+    char server_addr[24];
     char server_ip[INET_ADDRSTRLEN];
     packet msg;
 
@@ -44,7 +44,7 @@ int discover_server(int sockfd, int port, struct sockaddr_in *srv_addr, socklen_
             }
         }
 
-        if(recvfrom(sockfd, server_ip, INET_ADDRSTRLEN, 0, (struct sockaddr *)&srv_addr, &addr_len) < 0){
+        if(recvfrom(sockfd, server_ip, INET_ADDRSTRLEN, 0, (struct sockaddr *)srv_addr, &addr_len) < 0){
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 // Timeout
                 log_timeout();
