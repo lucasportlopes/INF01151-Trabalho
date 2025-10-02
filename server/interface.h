@@ -6,4 +6,6 @@
 
 void log_history(int num_transactions, int total_transferred, int total_balance);
 
+void log_discovery(char *client);
+
 #endif // INTERFACE_H

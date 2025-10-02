@@ -12,8 +12,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-
-#define BUF_SIZE 256
+#include <sys/time.h>
+#include <errno.h>
 
 enum packet_type {
   DESC,

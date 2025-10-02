@@ -1,37 +1,39 @@
-# Nome dos compiladores e flags
-CXX = g++
-CXXFLAGS = -Wall -O2
+CC = gcc
+CFLAGS = -Wall -Wextra -g
 
-# Estrutura de diretórios
-SRC_DIR_SERVER = server
-SRC_DIR_CLIENT = client
-BUILD_DIR = build
+# Directories
+SERVER_DIR = server
+CLIENT_DIR = client
+BUILD_DIR  = build
 
-# Arquivos fonte
-SERVER_SRC = $(SRC_DIR_SERVER)/main.cpp $(SRC_DIR_SERVER)/server.cpp
-CLIENT_SRC = $(SRC_DIR_CLIENT)/main.cpp $(SRC_DIR_CLIENT)/client.cpp
+# Sources
+SERVER_SRCS = $(SERVER_DIR)/server.c $(SERVER_DIR)/interface.c $(SERVER_DIR)/discovery.c
+CLIENT_SRCS = $(CLIENT_DIR)/client.c $(CLIENT_DIR)/interface.c $(CLIENT_DIR)/discovery.c
 
-# Executáveis
-SERVER_BIN = $(BUILD_DIR)/server
-CLIENT_BIN = $(BUILD_DIR)/client
+# Targets (binaries go inside build/)
+SERVER_BIN = $(BUILD_DIR)/servidor
+CLIENT_BIN = $(BUILD_DIR)/cliente
 
-# Alvo padrão: compila tudo
 all: $(SERVER_BIN) $(CLIENT_BIN)
 
-# Compilação do servidor
-$(SERVER_BIN): $(SERVER_SRC) | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -o $@ $(SERVER_SRC)
-
-# Compilação do cliente
-$(CLIENT_BIN): $(CLIENT_SRC) | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -o $@ $(CLIENT_SRC)
-
-# Criar diretório de build se não existir
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
-# Limpar os arquivos compilados
+$(SERVER_BIN): $(SERVER_SRCS) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $^ -o $@
+
+$(CLIENT_BIN): $(CLIENT_SRCS) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $^ -o $@
+
+run-server: $(SERVER_BIN)
+	./$(SERVER_BIN) 4000
+
+run-client: $(CLIENT_BIN)
+	./$(CLIENT_BIN) 4000
+
+run: all
+	./$(SERVER_BIN) 4000 & \
+	./$(CLIENT_BIN) 4000
+
 clean:
 	rm -rf $(BUILD_DIR)
-
-.PHONY: all clean

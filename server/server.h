@@ -1,7 +1,6 @@
 #ifndef SERVER_H
 #define SERVER_H
 
-
 #include "interface.h"
 
 #include <stdio.h>
@@ -9,12 +8,12 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-// #include <sys/types.h>
-// #include <sys/socket.h>
-// #include <netinet/in.h>
-// #include <netdb.h>
-
-#define BUF_SIZE 256
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <sys/time.h>
+#include <errno.h>
 
 enum packet_type {
   DESC,
