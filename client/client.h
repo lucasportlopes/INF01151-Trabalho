@@ -1,42 +1,44 @@
 #ifndef CLIENT_H
 #define CLIENT_H
 
+#include "interface.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
+#include <sys/time.h>
+#include <errno.h>
 
-#define PORT 4000
-
-class Client
-{
-private:
-    int sockfd;
-    int n;
-    unsigned int length;
-    struct sockaddr_in serv_addr;
-    struct sockaddr_in from;
-    struct hostent *server;
-    char buffer[256];
-    
-public:
-    Client();
-    ~Client();
-    
-    bool connect(const char* hostname);     // Conecta ao servidor
-    bool sendMessage();                     // Envia mensagem
-    bool receiveMessage();                  // Recebe resposta
-    void disconnect();                      // Desconecta do servidor
-    void run(const char* hostname);         // Executa o fluxo completo do cliente
-    
-private:
-    bool createSocket();                    // Cria o socket UDP
-    bool setupServer(const char* hostname); // Configura servidor
+enum packet_type {
+  DESC,
+  REQ,
+  DESC_ACK,
+  REQ_ACK
 };
+
+struct requisicao {
+    uint32_t dest_addr; // Endereço IP do cliente destino
+    uint32_t value; // Valor da transferência
+};
+
+struct requisicao_ack {
+    uint32_t seqn; // Número de sequência que está sendo feito o ack
+    uint32_t new_balance; // Novo saldo do cliente origem
+};
+
+typedef struct {
+    enum packet_type type; // Tipo do pacote (DESC | REQ | DESC_ACK | REQ_ACK )
+    uint32_t seqn; // Número de sequência de uma requisição
+    union {
+        struct requisicao req;
+        struct requisicao_ack ack;
+    };
+} packet;
 
 #endif // CLIENT_H

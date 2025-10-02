@@ -6,9 +6,9 @@ Este projeto implementa uma aplicação cliente-servidor para o trabalho da disc
 
 ```
 ├── client/         # Código fonte do cliente
-│   └── main.cpp
+│   └── client.cpp
 ├── server/         # Código fonte do servidor
-│   └── main.cpp
+│   └── server.cpp
 ├── build/          # Executáveis compilados
 ├── Makefile        # Script de compilação
 └── README.md       # Este arquivo
@@ -27,12 +27,26 @@ Execute o servidor primeiro, depois o cliente:
 
 **Terminal 1 - Servidor:**
 ```bash
-./build/server
+./build/servidor 4000
 ```
-
 **Terminal 2 - Cliente:**
 ```bash
-./build/client
+./build/cliente 4000
+```
+
+Ou com make
+**Terminal 1 - Servidor:**
+```bash
+make run-server
+```
+**Terminal 2 - Cliente:**
+```bash
+make run-client
+```
+
+Para rodar o servidor em background e o cliente em foreground:
+```bash
+make run
 ```
 
 ## Limpeza
