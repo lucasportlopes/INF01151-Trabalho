@@ -1,6 +1,6 @@
 #include "interface.h"
 
-void log_history(int num_transactions, int total_transferred, int total_balance){
+void log_history(int num_transactions, int total_transferred, int total_balance) {
     time_t current_time = time(NULL); // obtain time since 01/01/1970 UTC
 
     struct tm *local_time = localtime(&current_time); // convert to local time
@@ -20,7 +20,7 @@ void log_history(int num_transactions, int total_transferred, int total_balance)
 // void log_transactions()
 // void log_clients()
 
-void log_discovery(char *client){
+void log_discovery(char *client) {
     time_t current_time = time(NULL); // obtain time since 01/01/1970 UTC
 
     struct tm *local_time = localtime(&current_time); // convert to local time
@@ -33,4 +33,45 @@ void log_discovery(char *client){
         local_time->tm_min, // tm_min is the minute
         local_time->tm_sec,
         client); // tm_sec is the second
+}
+
+void log_request(char *client_ip, char *dest_ip, uint32_t req_id, uint32_t value, int num_transactions, int total_transferred, int total_balance) {
+    time_t current_time = time(NULL); // obtain time since 01/01/1970 UTC
+
+    struct tm *local_time = localtime(&current_time); // convert to local time
+
+    printf("%d-%02d-%02d %02d:%02d:%02d client %s id req %u dest %s value %u\n",
+        local_time->tm_year + 1900, // tm_year is the number of years since 1900
+        local_time->tm_mon + 1, // tm_mon is the month (0=January, 11=December)
+        local_time->tm_mday, // tm_mday is the day of the month
+        local_time->tm_hour, // tm_hour is the hour (0-23)
+        local_time->tm_min, // tm_min is the minute
+        local_time->tm_sec, // tm_sec is the second
+        client_ip,
+        req_id,
+        dest_ip,
+        value);
+    
+    printf("num transactions %d\n", num_transactions);
+    printf("total transferred %d total balance %d\n", total_transferred, total_balance);
+}
+
+void log_duplicate_request(char *client_ip, char *dest_ip, uint32_t req_id, uint32_t value, int num_transactions, int total_transferred, int total_balance) {
+    time_t current_time = time(NULL); // obtain time since 01/01/1970 UTC
+
+    struct tm *local_time = localtime(&current_time); // convert to local time
+
+    printf("%d-%02d-%02d %02d:%02d:%02d client %s DUP!! id req %u dest %s value %u\n",
+        local_time->tm_year + 1900, // tm_year is the number of years since 1900
+        local_time->tm_mon + 1, // tm_mon is the month (0=January, 11=December)
+        local_time->tm_mday, // tm_mday is the day of the month
+        local_time->tm_hour, // tm_hour is the hour (0-23)
+        local_time->tm_min, // tm_min is the minute
+        local_time->tm_sec, // tm_sec is the second
+        client_ip,
+        req_id,
+        dest_ip,
+        value);
+    
+    printf("num transactions %d total transferred %d total balance %d\n", num_transactions, total_transferred, total_balance);
 }
