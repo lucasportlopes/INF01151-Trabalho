@@ -1,11 +1,13 @@
 #include "client.h"
 #include "discovery.h"
+#include "processing.h"
 
-int main(int argc, char *argv[]){
-    if(argc!=2) {
+int main(int argc, char *argv[]) {
+    if (argc != 2) {
         printf("Uso: ./cliente <nr_porta>\n");
         return -1;
     }
+
     int port = atoi(argv[1]);
 
     int sockfd;
@@ -27,13 +29,14 @@ int main(int argc, char *argv[]){
     }
 
     // Discover server
-    if(discover_server(sockfd, port, &srv_addr, addr_len) != 0) {
+    if (discover_server(sockfd, port, &srv_addr, addr_len) != 0) {
         perror("Server not found\n");
         close(sockfd);
         exit(1);
     }
 
-    // printf("Server found at %s:%d\n", inet_ntoa(srv_addr.sin_addr), ntohs(srv_addr.sin_port));
+    request(sockfd, &srv_addr);
+
     close(sockfd);
     return 0;
 }

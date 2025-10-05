@@ -1,5 +1,6 @@
 #include "server.h"
 #include "discovery.h"
+#include "processing.h"
 
 int main(int argc, char *argv[]) {
     if(argc!=2) {
@@ -41,8 +42,15 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
-        if (msg.type == DESC) {
-            handle_discovery(sockfd, &client_addr, addr_len);
+        switch (msg.type) {
+            case DESC:
+                handle_discovery(sockfd, &client_addr, addr_len);
+                break;
+            case REQ:
+                handle_request(sockfd, &client_addr, addr_len, &msg);
+                break;
+            default:
+                break;
         }
     }
 
