@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <time.h>
+#include <stdint.h>
 
 void log_history(int num_transactions, int total_transferred, int total_balance);
 

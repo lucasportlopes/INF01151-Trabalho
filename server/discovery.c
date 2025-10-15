@@ -1,4 +1,5 @@
 #include "discovery.h"
+#include "processing.h"
 
 void handle_discovery(int sockfd, struct sockaddr_in *client_addr, socklen_t addr_len)
 {
@@ -14,6 +15,9 @@ void handle_discovery(int sockfd, struct sockaddr_in *client_addr, socklen_t add
     }
 
     inet_ntop(AF_INET, &local_addr.sin_addr, server_ip, sizeof(server_ip));
+
+    // Add client to the list (if not already present)
+    find_or_add_client(client_addr->sin_addr.s_addr);
 
     // Send unicast reply back to client
     if (sendto(sockfd, server_ip, INET_ADDRSTRLEN, 0, (struct sockaddr *)client_addr, addr_len) < 0) {

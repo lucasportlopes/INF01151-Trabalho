@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <time.h>
+#include <stdint.h>
 
 void log_connection(char* server_ip);
 
