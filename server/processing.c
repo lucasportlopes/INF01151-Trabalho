@@ -9,6 +9,7 @@
 #define MAX_CLIENTS 10
 static client_t client_table[MAX_CLIENTS];
 static int num_clients = 0;
+extern pthread_mutex_t data_mutex;
 
 void* process_request_thread(void* args) {
     if (args == NULL) {
@@ -50,12 +51,15 @@ client_t* find_client_by_ip(uint32_t ip_addr) {
 }
 
 void handle_request(int sockfd, const struct sockaddr_in *client_addr, socklen_t addr_len, const packet *req_packet) {
+    pthread_mutex_lock(&data_mutex);
     if (client_addr == NULL || req_packet == NULL) {
+        pthread_mutex_unlock(&data_mutex);
         return;
     }
 
     if (req_packet->type != REQ) {
         fprintf(stderr, "[srv] handle_request: tipo invalido %u\n", (unsigned)req_packet->type);
+        pthread_mutex_unlock(&data_mutex);
         return;
     }
 
@@ -73,34 +77,36 @@ void handle_request(int sockfd, const struct sockaddr_in *client_addr, socklen_t
 
     if(source_client == NULL) {
         fprintf(stderr, "[srv] handle_request: tabela de clientes cheia\n");
+        pthread_mutex_unlock(&data_mutex);
         return;
     }
 
     if (req_packet->seqn <= source_client->last_req_id) {
         log_duplicate_request(client_ip_str, dest_ip_str, req_packet->seqn, req_packet->req.value, num_transactions, total_transferred, total_balance);
     } else {
-        // Processa a nova requisição
         if (dest_client == NULL) {
             fprintf(stderr, "Cliente de destino %s não encontrado.\n", dest_ip_str);
-            // Mesmo com erro, o ACK deve ser enviado para o cliente não ficar bloqueado
+
+        } else if (req_packet->req.value == 0) {
+            source_client->last_req_id = req_packet->seqn;
+
         } else if (source_client->balance < req_packet->req.value) {
             fprintf(stderr, "Saldo insuficiente para o cliente %s.\n", client_ip_str);
-            // Saldo insuficiente, a transação não ocorre [cite: 48]
+
         } else {
-            // Realiza a transação
             source_client->balance -= req_packet->req.value;
             dest_client->balance += req_packet->req.value;
             
-            // Atualiza estatísticas
             num_transactions++;
             total_transferred += req_packet->req.value;
-            // O total_balance não muda em uma transferência
             
             source_client->last_req_id = req_packet->seqn;
             
             log_request(client_ip_str, dest_ip_str, req_packet->seqn, req_packet->req.value, num_transactions, total_transferred, total_balance);
         }
     }
+
+    pthread_mutex_unlock(&data_mutex);
 
     packet ack_packet;
     memset(&ack_packet, 0, sizeof(ack_packet));
@@ -111,15 +117,6 @@ void handle_request(int sockfd, const struct sockaddr_in *client_addr, socklen_t
 
     if (sendto(sockfd, &ack_packet, sizeof(ack_packet), 0, (const struct sockaddr *)client_addr, addr_len) < 0) {
         perror("sendto ack");
-    }
-
-    printf("Tabela de clientes:\n");
-    for (int i = 0; i < num_clients; i++) {
-        struct in_addr ip_addr_struct;
-        ip_addr_struct.s_addr = client_table[i].ip_addr;
-        char ip_str[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, &ip_addr_struct, ip_str, INET_ADDRSTRLEN);
-        printf("Cliente %d: IP=%s, LastReqID=%u, Balance=%d\n", i+1, ip_str, client_table[i].last_req_id, client_table[i].balance);
     }
     printf("\n");
 }

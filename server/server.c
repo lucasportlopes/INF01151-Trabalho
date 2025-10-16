@@ -6,9 +6,16 @@ int num_transactions = 0;
 int total_transferred = 0;
 int total_balance = 0;
 
+pthread_mutex_t data_mutex;
+
 int main(int argc, char *argv[]) {
     if(argc!=2) {
         printf("Uso: ./servidor <nr_porta>\n");
+        return -1;
+    }
+
+    if(pthread_mutex_init(&data_mutex, NULL) != 0) {
+        perror("Mutex init failed");
         return -1;
     }
 
@@ -50,11 +57,10 @@ int main(int argc, char *argv[]) {
         args->addr_len = sizeof(args->client_addr);
         if (recvfrom(sockfd, &args->req_packet, sizeof(packet), 0, (struct sockaddr *)&args->client_addr, &args->addr_len) < 0) {
             perror("recvfrom failed");
-            free(args); // Não se esqueça de libertar a memória em caso de erro
+            free(args); 
             continue;
         }
 
-        // Passar uma cópia do descritor do socket para a thread
         args->sockfd = sockfd;
 
         switch (args->req_packet.type) {
@@ -66,7 +72,7 @@ int main(int argc, char *argv[]) {
                 pthread_t thread_id;
                 if (pthread_create(&thread_id, NULL, process_request_thread, (void*)args) != 0) {
                     perror("pthread_create failed");
-                    free(args); // Liberta a memória em caso de falha na criação da thread
+                    free(args);
                     continue;
                 }
                 pthread_detach(thread_id);

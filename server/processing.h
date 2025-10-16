@@ -9,7 +9,7 @@
 typedef struct {
     uint32_t ip_addr;
     uint32_t last_req_id;
-    int balance;
+    uint32_t balance;
     int in_use; 
 } client_t;
 
