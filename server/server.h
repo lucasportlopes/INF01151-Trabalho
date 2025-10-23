@@ -14,6 +14,11 @@
 #include <netdb.h>
 #include <sys/time.h>
 #include <errno.h>
+#include <pthread.h>
+
+extern int num_transactions;
+extern int total_transferred;
+extern int total_balance;
 
 enum packet_type {
   DESC,
@@ -40,5 +45,12 @@ typedef struct {
         struct requisicao_ack ack;
     };
 } packet;
+
+typedef struct {
+    int sockfd;
+    struct sockaddr_in client_addr;
+    socklen_t addr_len;
+    packet req_packet;
+} thread_args_t;
 
 #endif // SERVER_H
