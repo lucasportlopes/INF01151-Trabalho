@@ -15,6 +15,7 @@
 #include <sys/time.h>
 #include <errno.h>
 #include <pthread.h>
+#include <semaphore.h>
 
 extern int num_transactions;
 extern int total_transferred;

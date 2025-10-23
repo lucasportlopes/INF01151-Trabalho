@@ -97,6 +97,7 @@ void request(int sockfd, const struct sockaddr_in *server_addr) {
         printf("[cli] server %s ack seqn %u new balance %u\n", server_ip, ack_pkt.ack.seqn, ack_pkt.ack.new_balance);
 
         next_sequence = ack_pkt.ack.seqn + 1;
+        
     }
 }
 

@@ -2,11 +2,14 @@
 #include "discovery.h"
 #include "processing.h"
 
+#define MAX_THREADS 10;
 int num_transactions = 0;
 int total_transferred = 0;
 int total_balance = 0;
 
-pthread_mutex_t data_mutex;
+pthread_mutex_t write_mutex;
+pthread_mutex_t read_mutex;
+sem_t thread_limit;
 
 int main(int argc, char *argv[]) {
     if(argc!=2) {
@@ -14,11 +17,20 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    if(pthread_mutex_init(&data_mutex, NULL) != 0) {
+    if(pthread_mutex_init(&write_mutex, NULL) != 0) {
         perror("Mutex init failed");
         return -1;
     }
-
+    if(pthread_mutex_init(&read_mutex, NULL) != 0) {
+        perror("Mutex init failed");
+        return -1;
+    }
+    if (sem_init(&thread_limit,0,MAX_THREADS) != 0)
+    {
+        perror("Semaphore init failed");
+        return -1;
+    }
+    
     int port = atoi(argv[1]), sockfd;
     struct sockaddr_in server_addr;
     //socklen_t addr_len = sizeof(client_addr);
