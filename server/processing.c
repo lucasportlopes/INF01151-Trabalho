@@ -73,18 +73,22 @@ void handle_request(int sockfd, const struct sockaddr_in *client_addr, socklen_t
     pthread_mutex_unlock(&read_mutex);
     if (client_addr == NULL || req_packet == NULL)
     {
+        pthread_mutex_lock(&read_mutex);
         readers--;
         if (readers == 0)
             pthread_mutex_unlock(&write_mutex);
+        pthread_mutex_unlock(&read_mutex);
         return;
     }
 
     if (req_packet->type != REQ)
     {
         fprintf(stderr, "[srv] handle_request: tipo invalido %u\n", (unsigned)req_packet->type);
+        pthread_mutex_lock(&read_mutex);
         readers--;
         if (readers == 0)
             pthread_mutex_unlock(&write_mutex);
+        pthread_mutex_unlock(&read_mutex);
         return;
     }
 
@@ -103,9 +107,11 @@ void handle_request(int sockfd, const struct sockaddr_in *client_addr, socklen_t
     if (source_client == NULL)
     {
         fprintf(stderr, "[srv] handle_request: tabela de clientes cheia\n");
+        pthread_mutex_lock(&read_mutex);
         readers--;
         if (readers == 0)
             pthread_mutex_unlock(&write_mutex);
+        pthread_mutex_unlock(&read_mutex);
         return;
     }
     bool req_processed = false;
@@ -114,9 +120,11 @@ void handle_request(int sockfd, const struct sockaddr_in *client_addr, socklen_t
     client_t copy_dest_client = *dest_client;
     if (req_packet->seqn <= source_client->last_req_id)
     {
+        pthread_mutex_lock(&read_mutex);
         readers--;
         if (readers == 0)
             pthread_mutex_unlock(&write_mutex);
+        pthread_mutex_unlock(&read_mutex);
         pthread_thread_mutex_lock(&write_mutex);
         log_duplicate_request(client_ip_str, dest_ip_str, req_packet->seqn, req_packet->req.value, num_transactions, total_transferred, total_balance);
         pthread_thread_mutex_unlock(&write_mutex);
@@ -150,9 +158,11 @@ void handle_request(int sockfd, const struct sockaddr_in *client_addr, socklen_t
     }
     if (req_processed)
     {
+        pthread_mutex_lock(&read_mutex);
         readers--;
         if (readers == 0)
             pthread_mutex_unlock(&write_mutex);
+        pthread_mutex_unlock(&read_mutex);
         pthread_mutex_lock(&write_mutex);
         source_client->last_req_id = copy_source_client.last_req_id;
         source_client->balance = copy_source_client.balance;
