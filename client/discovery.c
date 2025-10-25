@@ -3,7 +3,6 @@
 int discover_server(int sockfd, int port, struct sockaddr_in *srv_addr, socklen_t addr_len)
 {
     struct sockaddr_in broadcast_addr;
-    char server_addr[24];
     char server_ip[INET_ADDRSTRLEN];
     packet msg;
 
@@ -18,8 +17,8 @@ int discover_server(int sockfd, int port, struct sockaddr_in *srv_addr, socklen_
     msg.seqn = 0;
 
     struct timeval timeout;
-    timeout.tv_sec = 2; // 0 seconds
-    timeout.tv_usec = 0; // 10000 microseconds
+    timeout.tv_sec = 0; // 0 seconds
+    timeout.tv_usec = 10000; // 10000 microseconds
 
     if (setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) < 0) {
         perror("send timeout failed");
@@ -56,9 +55,17 @@ int discover_server(int sockfd, int port, struct sockaddr_in *srv_addr, socklen_
             }
         }
 
+        if (inet_ntop(AF_INET, &srv_addr->sin_addr, server_ip, sizeof(server_ip)) == NULL) {
+            perror("inet_ntop");
+            close(sockfd);
+            exit(1);
+        }
+
         // Got a reply
-        sprintf(server_addr, "%s:%d", server_ip, port);
-        log_connection(server_addr);
+        log_connection(server_ip);
+
+        // Got a reply
+        log_connection(server_ip);
 
         break;  // stop retrying
     }
