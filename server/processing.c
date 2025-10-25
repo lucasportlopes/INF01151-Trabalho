@@ -172,6 +172,7 @@ void handle_request(int sockfd, const struct sockaddr_in *client_addr, socklen_t
             num_transactions++;
             total_transferred += req_packet->req.value;
         };
+        log_request(client_ip_str, dest_ip_str, req_packet->seqn, req_packet->req.value, num_transactions, total_transferred, total_balance);
         pthread_mutex_unlock(&write_mutex);
     };
 
