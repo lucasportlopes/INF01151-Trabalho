@@ -1,6 +1,8 @@
 #include "discovery.h"
 #include "processing.h"
 
+extern pthread_mutex_t data_mutex;  // Proteger acesso à tabela de clientes
+
 void handle_discovery(int sockfd, struct sockaddr_in *client_addr, socklen_t addr_len)
 {
     struct sockaddr_in local_addr;
@@ -16,8 +18,10 @@ void handle_discovery(int sockfd, struct sockaddr_in *client_addr, socklen_t add
 
     inet_ntop(AF_INET, &local_addr.sin_addr, server_ip, sizeof(server_ip));
 
-    // Add client to the list (if not already present)
+    // Add client to the list (if not already present) - PROTEGIDO POR MUTEX
+    pthread_mutex_lock(&data_mutex);
     find_or_add_client(client_addr->sin_addr.s_addr);
+    pthread_mutex_unlock(&data_mutex);
 
     // Send unicast reply back to client
     if (sendto(sockfd, server_ip, INET_ADDRSTRLEN, 0, (struct sockaddr *)client_addr, addr_len) < 0) {
