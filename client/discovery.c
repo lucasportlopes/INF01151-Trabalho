@@ -64,9 +64,6 @@ int discover_server(int sockfd, int port, struct sockaddr_in *srv_addr, socklen_
         // Got a reply
         log_connection(server_ip);
 
-        // Got a reply
-        log_connection(server_ip);
-
         break;  // stop retrying
     }
 
