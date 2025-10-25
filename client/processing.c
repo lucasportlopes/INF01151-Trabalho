@@ -3,7 +3,6 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <pthread.h>
-#include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -31,13 +30,8 @@ typedef struct {
     command_channel_t channel;
     pthread_t reader_thread;
     pthread_t worker_thread;
-    volatile sig_atomic_t stop;
+    bool stop;
 } client_context_t;
-
-static volatile sig_atomic_t sigint_received = 0;
-
-static void setup_signal_handler(void);
-static void sigint_handler(int signum);
 
 static void command_channel_init(command_channel_t *channel);
 static void command_channel_destroy(command_channel_t *channel);
@@ -53,8 +47,6 @@ static void *input_thread_main(void *arg);
 static void *worker_thread_main(void *arg);
 static bool handle_transfer_command(client_context_t *ctx, const char *line);
 
-static bool parse_command(const char *line, char dest_ip[INET_ADDRSTRLEN], uint32_t *value_out);
-
 void request(int sockfd, const struct sockaddr_in *server_addr) {
     if (server_addr == NULL) {
         return;
@@ -66,15 +58,13 @@ void request(int sockfd, const struct sockaddr_in *server_addr) {
     ctx.server_addr = *server_addr;
     ctx.server_len = sizeof(*server_addr);
     ctx.next_sequence = 1;
-    ctx.stop = 0;
+    ctx.stop = false;
 
     if (inet_ntop(AF_INET, &ctx.server_addr.sin_addr, ctx.server_ip, sizeof(ctx.server_ip)) == NULL) {
         snprintf(ctx.server_ip, sizeof(ctx.server_ip), "<desconhecido>");
     }
 
     command_channel_init(&ctx.channel);
-    setup_signal_handler();
-    sigint_received = 0;
 
     if (pthread_create(&ctx.worker_thread, NULL, worker_thread_main, &ctx) != 0) {
         perror("pthread_create worker");
@@ -84,7 +74,7 @@ void request(int sockfd, const struct sockaddr_in *server_addr) {
 
     if (pthread_create(&ctx.reader_thread, NULL, input_thread_main, &ctx) != 0) {
         perror("pthread_create reader");
-        ctx.stop = 1;
+        ctx.stop = true;
         command_channel_close(&ctx.channel);
         pthread_join(ctx.worker_thread, NULL);
         command_channel_destroy(&ctx.channel);
@@ -95,22 +85,6 @@ void request(int sockfd, const struct sockaddr_in *server_addr) {
     pthread_join(ctx.worker_thread, NULL);
 
     command_channel_destroy(&ctx.channel);
-}
-
-static void setup_signal_handler(void) {
-    struct sigaction sa;
-    memset(&sa, 0, sizeof(sa));
-    sa.sa_handler = sigint_handler;
-    sigemptyset(&sa.sa_mask);
-
-    if (sigaction(SIGINT, &sa, NULL) < 0) {
-        perror("sigaction");
-    }
-}
-
-static void sigint_handler(int signum) {
-    (void)signum;
-    sigint_received = 1;
 }
 
 static void command_channel_init(command_channel_t *channel) {
@@ -210,20 +184,10 @@ static void *input_thread_main(void *arg) {
     char buffer[COMMAND_BUFFER_SIZE];
 
     while (!ctx->stop) {
-        if (sigint_received) {
-            ctx->stop = 1;
-            break;
-        }
-
         errno = 0;
         if (fgets(buffer, sizeof(buffer), stdin) == NULL) {
             if (feof(stdin)) {
-                ctx->stop = 1;
-                break;
-            }
-
-            if (errno == EINTR && sigint_received) {
-                ctx->stop = 1;
+                ctx->stop = true;
                 break;
             }
 
@@ -241,7 +205,7 @@ static void *input_thread_main(void *arg) {
         }
 
         if (is_exit_command(buffer)) {
-            ctx->stop = 1;
+            ctx->stop = true;
             break;
         }
 
@@ -269,7 +233,7 @@ static void *worker_thread_main(void *arg) {
         }
     }
 
-    ctx->stop = 1;
+    ctx->stop = true;
     command_channel_close(&ctx->channel);
     return NULL;
 }
@@ -300,9 +264,6 @@ static bool handle_transfer_command(client_context_t *ctx, const char *line) {
                           (const struct sockaddr *)&ctx->server_addr, ctx->server_len);
 
     if (sent < 0) {
-        if (errno == EINTR && (ctx->stop || sigint_received)) {
-            return false;
-        }
         perror("sendto");
         return true;
     }
@@ -319,9 +280,6 @@ static bool handle_transfer_command(client_context_t *ctx, const char *line) {
                                 (struct sockaddr *)&reply_addr, &reply_len);
 
     if (received < 0) {
-        if (errno == EINTR && (ctx->stop || sigint_received)) {
-            return false;
-        }
         perror("recvfrom");
         return true;
     }
