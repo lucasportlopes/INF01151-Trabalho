@@ -1,10 +1,17 @@
 #include "discovery.h"
 #include "processing.h"
+#include "server.h"
 
+extern int my_id;
+extern int current_leader_id;
 extern pthread_mutex_t data_mutex;  // Proteger acesso à tabela de clientes
 
 void handle_discovery(int sockfd, struct sockaddr_in *client_addr, socklen_t addr_len)
 {
+    if (my_id != current_leader_id) {
+        // Se eu sou Backup, fico quieto. O cliente deve procurar o Líder.
+        return; 
+    }
     struct sockaddr_in local_addr;
     socklen_t local_len = sizeof(local_addr);
     char client_ip[22];
