@@ -16,16 +16,8 @@
 #include <errno.h>
 #include <pthread.h>
 
-#define MAX_SERVERS = 4;
-
-extern int num_transactions;
-extern int total_transferred;
-extern int total_balance;
-extern server_role_t current_role; // Variável global para saber se sou Líder ou Backup
-extern int my_id;                  // Variável global com meu ID
-extern int current_leader_id;   // ID do Líder atual
-extern int num_servers;         // Quantidade de servidores na lista
-extern replica_t server_list[MAX_SERVERS]; // Lista de todos os servidores (Líder + Backups)
+#define MAX_SERVERS 4
+#define MAX_CLIENTS 10
 
 typedef enum {
     REPLICA_PRIMARIO,   
@@ -33,9 +25,27 @@ typedef enum {
 } server_role_t;
 
 typedef struct {
-    int id;               // ID do servidor (1, 2, 3...) - Importante para eleição depois
-    struct sockaddr_in addr; // Estrutura pronta para sendto()
+    int id;    
+    struct sockaddr_in addr;
 } replica_t;
+
+typedef struct {
+    uint32_t ip_addr;
+    uint32_t last_req_id;
+    uint32_t balance;
+    int in_use; 
+} client_t;
+
+extern int num_transactions;
+extern int total_transferred;
+extern int num_clients;
+extern int total_balance;
+extern int my_id;                  
+extern int current_leader_id;   
+extern int num_servers;        
+extern replica_t server_list[MAX_SERVERS]; 
+extern client_t client_table[MAX_CLIENTS];
+extern server_role_t current_role; 
 
 enum packet_type {
   DESC,
@@ -47,7 +57,8 @@ enum packet_type {
   ELECTION,    
   COORDINATOR,
   FIND_LEADER,
-  PING
+  PING,
+  SERVER_JOIN
 };
 
 struct requisicao {
@@ -62,9 +73,11 @@ struct requisicao_ack {
 
 struct replication_msg
 {
-    uint32_t client_ip;      // ID/IP do cliente afetado
-    uint32_t new_balance;    // Novo saldo para atualizar no backup
-    uint32_t transaction_id; // ID da transação (para consistência)
+    int num_clients; // Número de clientes na tabela
+    int num_transactions; // Número total de transações processadas
+    int total_transferred; // Valor total transferido
+    int total_balance; // Saldo total entre todos os clientes
+    client_t client_table[MAX_CLIENTS]; // Tabela de clientes completa
 };
 
 struct leader_info {
@@ -83,18 +96,11 @@ typedef struct {
     union {
         struct requisicao req;
         struct requisicao_ack ack;
-    };
-} packet;
-
-typedef struct {
-    enum packet_type type; // Tipo do pacote (REP_UPDATE | REP_CONFIRM | ELECTION | COORDINATOR | FIND_LEADER )
-    uint32_t seqn; // Número de sequência de uma requisição
-    union {
         struct replication_msg rep;
         struct leader_info leader;
         struct send_info send_new;
-    }
-} packet_servers;
+    };
+} packet;
 
 typedef struct {
     int sockfd;
