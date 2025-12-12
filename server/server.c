@@ -170,6 +170,7 @@ int main(int argc, char *argv[])
     else
     {
         current_leader_id = my_id;
+        current_role = REPLICA_PRIMARIO;
         num_servers = 1;
         server_list[0].id = my_id;
         server_list[0].addr = server_addr;

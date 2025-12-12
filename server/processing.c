@@ -1,4 +1,5 @@
 #include "processing.h"
+#include "replication.h"
 #include <arpa/inet.h>
 #include <errno.h>
 #include <stdio.h>
@@ -50,25 +51,7 @@ client_t* find_client_by_ip(uint32_t ip_addr) {
     return NULL;
 }
 
-void send_replication_update(int sockfd, uint32_t req_id) {
-    packet pkt;
-    memset(&pkt, 0, sizeof(pkt));
-    pkt.type = REP_UPDATE;
-    pkt.seqn = req_id;
-    
-    pkt.rep.num_clients = num_clients;
-    pkt.rep.num_transactions = num_transactions;
-    pkt.rep.total_transferred = total_transferred;
-    pkt.rep.total_balance = total_balance;
-    memcpy(pkt.rep.client_table, client_table, sizeof(client_table)); 
 
-    for (int i = 0; i < num_servers; i++) {
-        if (server_list[i].id == my_id) continue; 
-
-        sendto(sockfd, &pkt, sizeof(pkt), 0, 
-               (struct sockaddr *)&server_list[i].addr, sizeof(server_list[i].addr));
-    }
-}
 
 void handle_request(int sockfd, const struct sockaddr_in *client_addr, socklen_t addr_len, const packet *req_packet) {
     pthread_mutex_lock(&data_mutex);
@@ -124,7 +107,7 @@ void handle_request(int sockfd, const struct sockaddr_in *client_addr, socklen_t
             
             log_request(client_ip_str, dest_ip_str, req_packet->seqn, req_packet->req.value, num_transactions, total_transferred, total_balance);
 
-            send_replication_update(sockfd, req_packet->seqn);
+            propagate_state_to_backups(sockfd);
         }
     }
 
