@@ -1,6 +1,7 @@
 #include "server.h"
 #include "discovery.h"
 #include "processing.h"
+#include "replication.h"
 
 int my_id = -1;
 int current_leader_id = -1;
@@ -9,6 +10,7 @@ int num_transactions = 0;
 int total_transferred = 0;
 int total_balance = 0;
 replica_t server_list[MAX_SERVERS];
+server_role_t current_role = REPLICA_SECUNDARIO;
 pthread_mutex_t data_mutex;
 
 void add_peer(int id, struct sockaddr_in addr)
@@ -39,70 +41,6 @@ void add_peer(int id, struct sockaddr_in addr)
     else
     {
         printf("[srv] AVISO: Lista de servidores cheia! Não foi possível adicionar ID %d\n", id);
-    }
-}
-
-void become_leader(int sockfd)
-{
-    // 1. Atualiza o estado global
-    current_leader_id = my_id;
-    printf("[ELEICAO] Vitória! Eu (ID %d) sou o novo Lider.\n", my_id);
-
-    // 2. Prepara o pacote de proclamação
-    packet pkt;
-    memset(&pkt, 0, sizeof(pkt));
-    pkt.type = COORDINATOR;
-    pkt.seqn = my_id;
-
-    // Preenche a struct interna com dados vitais (para sincronizar quem entrar depois)
-    pkt.leader.leader_id = my_id;
-    pkt.leader.nr_servers = num_servers;
-    memcpy(pkt.leader.servers, server_list, sizeof(server_list));
-
-    // 3. Avisa todo mundo (menos eu mesmo)
-    for (int i = 0; i < num_servers; i++)
-    {
-        if (server_list[i].id != my_id && server_list[i].id != 0)
-        {
-            sendto(sockfd, &pkt, sizeof(pkt), 0,
-                   (struct sockaddr *)&server_list[i].addr, sizeof(struct sockaddr_in));
-        }
-    }
-}
-
-void start_election(int sockfd)
-{
-    printf("[ELEICAO] Iniciando eleição (Valentão)... Procurando IDs maiores que %d\n", my_id);
-
-    int sent_challenges = 0;
-
-    // Percorre a lista de servidores conhecidos
-    for (int i = 0; i < num_servers; i++)
-    {
-        // Regra do Valentão: Só desafio quem tem ID MAIOR que o meu
-        if (server_list[i].id > my_id)
-        {
-            packet pkt;
-            memset(&pkt, 0, sizeof(pkt));
-            pkt.type = ELECTION;
-            pkt.seqn = my_id;
-
-            // Envia desafio
-            sendto(sockfd, &pkt, sizeof(pkt), 0,
-                   (struct sockaddr *)&server_list[i].addr, sizeof(server_list[i].addr));
-
-            printf("[ELEICAO] Desafiei o ID %d no IP %s\n",
-                   server_list[i].id, inet_ntoa(server_list[i].addr.sin_addr));
-
-            sent_challenges++;
-        }
-    }
-
-    //Se não enviei desafio pra ninguém, é porque sou o maior!
-    if (sent_challenges == 0)
-    {
-        printf("[ELEICAO] Ninguém é maior que eu. Assumindo liderança imediatamente.\n");
-        become_leader(sockfd);
     }
 }
 
@@ -244,6 +182,9 @@ int main(int argc, char *argv[])
     timeout.tv_usec = 0;
     setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
+    // Inicializa o sistema de ping (threads de heartbeat)
+    init_ping_system(sockfd);
+
     while (1)
     {
         thread_args_t *args = malloc(sizeof(thread_args_t));
@@ -384,7 +325,7 @@ int main(int argc, char *argv[])
             break;
 
         case ELECTION:
-            if (args->req_packet.seqn < my_id)
+            if ((int)args->req_packet.seqn < my_id)
             {
                 printf("[ELEICAO] Recebi desafio do ID %d (Menor que eu). Respondendo...\n", args->req_packet.seqn);
 
@@ -400,6 +341,11 @@ int main(int argc, char *argv[])
             {
                 printf("[ELEICAO] Recebi desafio de ID %d (Maior). Aguardando ele assumir.\n", args->req_packet.seqn);
             }
+            free(args);
+            break;
+
+        case PING:
+            handle_ping(&args->req_packet, &args->client_addr);
             free(args);
             break;
 
