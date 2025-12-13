@@ -122,7 +122,7 @@ void handle_election_message(int sockfd, const packet* pkt, const struct sockadd
     // Como este processo tem ID maior (senão não receberia ELECTION), envia resposta
     packet answer_pkt;
     memset(&answer_pkt, 0, sizeof(answer_pkt));
-    answer_pkt.type = REQ_ACK; // Usando REQ_ACK como resposta ANSWER
+    answer_pkt.type = ANSWER; // Usando ANSWER como resposta 
     answer_pkt.leader.leader_id = my_id;
     
     sendto(sockfd, &answer_pkt, sizeof(answer_pkt), 0,
@@ -182,6 +182,15 @@ void handle_coordinator_message(const packet* pkt) {
     
     // Atualiza informações do líder
     current_leader_id = new_leader_id;
+
+    pthread_mutex_lock(&health_mutex);
+    for(int i=0; i<num_servers; i++) {
+        if(server_list[i].id == new_leader_id) {
+            server_health[i].last_ping_received = time(NULL);
+            server_health[i].is_alive = 1;
+        }
+    }
+    pthread_mutex_unlock(&health_mutex);
     
     pthread_mutex_lock(&election_mutex);
     election_in_progress = 0;
@@ -225,6 +234,13 @@ void promote_to_primary(int sockfd) {
     pthread_mutex_lock(&election_mutex);
     election_in_progress = 0;
     pthread_mutex_unlock(&election_mutex);
+
+    pthread_mutex_lock(&health_mutex);
+    for(int i=0; i<MAX_SERVERS; i++) {
+        server_health[i].is_alive = 1;
+        server_health[i].last_ping_received = time(NULL);
+    }
+    pthread_mutex_unlock(&health_mutex);
     
     // Anuncia coordenação para todos os outros servidores
     packet coordinator_pkt;
@@ -429,36 +445,45 @@ void* ping_monitor_thread(void* arg) {
         int leader_failed = 0;
         
         pthread_mutex_lock(&health_mutex);
+        pthread_mutex_lock(&data_mutex); 
         
         for (int i = 0; i < num_servers; i++) {
             if (server_list[i].id == my_id) {
-                continue; // Não verifica a si mesmo
+                continue;
             }
             
             time_t elapsed = now - server_health[i].last_ping_received;
             
-            // Servidor não respondeu no timeout
+            // --- DETECÇÃO DE FALHA ---
             if (elapsed > PING_TIMEOUT && server_health[i].is_alive) {
                 server_health[i].is_alive = 0;
-                printf("[PING] Servidor ID %d não responde (timeout: %ld segundos)\n", 
-                       server_list[i].id, elapsed);
+                int failed_id = server_list[i].id;
+
+                printf("[PING] Servidor ID %d morreu (timeout: %ld s). Removendo da lista.\n", 
+                       failed_id, elapsed);
                 
-                // Verifica se é o líder que falhou
-                if (server_list[i].id == current_leader_id) {
+                // Verifica se foi o líder que morreu ANTES de remover
+                if (failed_id == current_leader_id) {
                     leader_failed = 1;
                 }
+
+                for (int j = i; j < num_servers - 1; j++) {
+                    server_list[j] = server_list[j+1];
+                    server_health[j] = server_health[j+1];
+                }
+                num_servers--;
+                i--;
             }
             
-            // Servidor voltou
             else if (elapsed <= PING_TIMEOUT && !server_health[i].is_alive) {
                 server_health[i].is_alive = 1;
                 printf("[PING] Servidor ID %d voltou a responder\n", server_list[i].id);
             }
         }
         
+        pthread_mutex_unlock(&data_mutex);
         pthread_mutex_unlock(&health_mutex);
         
-        // Se o líder falhou e não estamos em eleição, inicia eleição
         if (leader_failed) {
             pthread_mutex_lock(&election_mutex);
             int already_electing = election_in_progress;
@@ -467,21 +492,10 @@ void* ping_monitor_thread(void* arg) {
             if (!already_electing && current_leader_id != my_id) {
                 printf("[PING] ==========================================\n");
                 printf("[PING] LÍDER (ID %d) FALHOU!\n", current_leader_id);
-                printf("[PING] Aguardando %d segundos antes de iniciar eleição...\n", 
-                       FAILURE_THRESHOLD - PING_TIMEOUT);
+                printf("[PING] Iniciando eleição imediatamente...\n");
                 printf("[PING] ==========================================\n");
                 
-                sleep(FAILURE_THRESHOLD - PING_TIMEOUT);
-                
-                // Verifica se ainda está sem líder
-                pthread_mutex_lock(&health_mutex);
-                int still_down = !server_health[current_leader_id % MAX_SERVERS].is_alive;
-                pthread_mutex_unlock(&health_mutex);
-                
-                if (still_down) {
-                    printf("[PING] Iniciando eleição devido à falha do líder...\n");
-                    start_election(sockfd);
-                }
+                start_election(sockfd);
             }
         }
     }

@@ -146,35 +146,73 @@ int main(int argc, char *argv[])
     socklen_t leader_addr_len = sizeof(leader_addr);
     packet resp_pkt;
 
-    if (recvfrom(sockfd, &resp_pkt, sizeof(packet), 0, (struct sockaddr *)&leader_addr, &leader_addr_len) > 0)
+    int n = recvfrom(sockfd, &resp_pkt, sizeof(packet), 0, (struct sockaddr *)&leader_addr, &leader_addr_len);
+
+    if (n > 0)
     {
-        current_leader_id = resp_pkt.leader.leader_id;
-        num_servers = resp_pkt.leader.nr_servers;
-        memcpy(server_list, resp_pkt.leader.servers, sizeof(server_list));
-        printf("[STARTUP] Líder encontrado: ID %d\n", current_leader_id);
+        // Alguém respondeu!
+        int found_leader_id = resp_pkt.leader.leader_id; 
 
-        if (current_leader_id != my_id)
-        {
-            packet join_pkt;
-            memset(&join_pkt, 0, sizeof(join_pkt));
-            join_pkt.type = SERVER_JOIN;
-            join_pkt.seqn = my_id;
-            join_pkt.send_new.new_server.id = my_id;
-            join_pkt.send_new.new_server.addr = server_addr;
+        // --- CORREÇÃO BULLY: Se encontrei um líder MENOR que eu, tomo o poder ---
+        if (found_leader_id < my_id) {
+            printf("[BULLY] Startup: Encontrei líder ID %d, mas sou ID %d (Maior). Assumindo liderança!\n", found_leader_id, my_id);
+            
+            // Força a ser líder imediatamente
+            current_role = REPLICA_PRIMARIO;
+            current_leader_id = my_id;
+            num_servers = 0;
+            
+            server_list[0].id = my_id;
+            server_list[0].addr = server_addr;
+            num_servers++;
 
-            // Envia para o endereço de onde veio a resposta do líder
-            sendto(sockfd, &join_pkt, sizeof(join_pkt), 0, (struct sockaddr *)&leader_addr, leader_addr_len);
-            printf("[STARTUP] Enviei SERVER_JOIN para o Líder ID %d\n", current_leader_id);
+            int received_count = resp_pkt.leader.nr_servers;
+            
+            for (int i = 0; i < received_count; i++) {
+                replica_t known_server = resp_pkt.leader.servers[i];
+                // Adiciono todos (menos eu mesmo, pra não duplicar)
+                if (known_server.id != my_id) {
+                    add_peer(known_server.id, known_server.addr);
+                }
+            }
+
+            // Usa a função de promoção (replication.c) para avisar todo mundo (incluindo o antigo líder)
+            // Isso envia COORDINATOR para todos
+            promote_to_primary(sockfd); 
+        } 
+        // --- Caso normal: O líder encontrado é maior ou igual, aceito ele ---
+        else {
+            current_leader_id = found_leader_id;
+            num_servers = resp_pkt.leader.nr_servers;
+            memcpy(server_list, resp_pkt.leader.servers, sizeof(server_list));
+            current_role = REPLICA_SECUNDARIO; // Garante que sou backup
+            
+            printf("[STARTUP] Líder legítimo encontrado: ID %d\n", current_leader_id);
+
+            // Me apresento ao Líder (SERVER_JOIN)
+            if (current_leader_id != my_id) {
+                packet join_pkt;
+                memset(&join_pkt, 0, sizeof(join_pkt));
+                join_pkt.type = SERVER_JOIN;
+                join_pkt.seqn = my_id;
+                join_pkt.send_new.new_server.id = my_id;
+                join_pkt.send_new.new_server.addr = server_addr;
+
+                // Envia para o endereço de onde veio a resposta
+                sendto(sockfd, &join_pkt, sizeof(join_pkt), 0, (struct sockaddr *)&leader_addr, leader_addr_len);
+                printf("[STARTUP] Enviei SERVER_JOIN para o Líder ID %d\n", current_leader_id);
+            }
         }
     }
     else
     {
+        // Timeout: Ninguém respondeu
+        printf("[STARTUP] Nenhuma resposta (Timeout). Assumindo liderança.\n");
         current_leader_id = my_id;
         current_role = REPLICA_PRIMARIO;
         num_servers = 1;
         server_list[0].id = my_id;
         server_list[0].addr = server_addr;
-        printf("[STARTUP] Nenhuma resposta. Sou o novo líder.\n");
     }
 
     log_history(num_transactions, total_transferred, total_balance);
@@ -206,152 +244,134 @@ int main(int argc, char *argv[])
 
         switch (args->req_packet.type)
         {
-        case FIND_LEADER:
-            if (my_id == current_leader_id)
-            {
-                int backup_id = args->req_packet.send_new.new_server.id;
-
-                add_peer(backup_id, args->client_addr);
-                printf("[LIDER] Backup registrado na lista: ID %d\n", backup_id);
-
-                // Responde com COORDINATOR e lista de servidores
-                packet resp;
-                memset(&resp, 0, sizeof(resp));
-                resp.type = COORDINATOR;
-                resp.seqn = my_id;
-                resp.leader.leader_id = my_id;
-                resp.leader.nr_servers = num_servers;
-                memcpy(resp.leader.servers, server_list, sizeof(server_list));
-
-                sendto(sockfd, &resp, sizeof(resp), 0, (struct sockaddr *)&args->client_addr, args->addr_len);
-
-                // Envia a tabela para o novo backup
-                packet rep_pkt;
-                memset(&rep_pkt, 0, sizeof(rep_pkt));
-                rep_pkt.type = REP_UPDATE;
-                rep_pkt.seqn = num_transactions;
-                rep_pkt.rep.num_clients = num_clients;
-                rep_pkt.rep.num_transactions = num_transactions;
-                rep_pkt.rep.total_transferred = total_transferred;
-                rep_pkt.rep.total_balance = total_balance;
-                memcpy(rep_pkt.rep.client_table, client_table, sizeof(client_table));
-
-                sendto(sockfd, &rep_pkt, sizeof(rep_pkt), 0, (struct sockaddr *)&args->client_addr, args->addr_len);
-
-                // Informa os outros backups sobre o novo servidor
-                for (int i = 0; i < num_servers; i++)
+            case FIND_LEADER:
+                if (my_id == current_leader_id)
                 {
-                    if (server_list[i].id == my_id || server_list[i].id == backup_id)
-                        continue;
+                    int backup_id = args->req_packet.send_new.new_server.id;
 
-                    sendto(sockfd, &resp, sizeof(resp), 0,
-                           (struct sockaddr *)&server_list[i].addr, sizeof(struct sockaddr_in));
-                }
+                    add_peer(backup_id, args->client_addr);
+                    printf("[LIDER] Backup registrado na lista: ID %d\n", backup_id);
 
-                printf("[LIDER] Informei minha liderança para o ID %d\n", args->req_packet.seqn);
-            }
-            free(args);
-            break;
+                    // Responde com COORDINATOR e lista de servidores
+                    packet resp;
+                    memset(&resp, 0, sizeof(resp));
+                    resp.type = COORDINATOR;
+                    resp.seqn = my_id;
+                    resp.leader.leader_id = my_id;
+                    resp.leader.nr_servers = num_servers;
+                    memcpy(resp.leader.servers, server_list, sizeof(server_list));
 
-        case SERVER_JOIN:
-            if (my_id == current_leader_id)
-            {
-                int new_id = args->req_packet.send_new.new_server.id;
-                struct sockaddr_in new_addr = args->client_addr;
-                add_peer(new_id, new_addr);
-                printf("[LIDER] Recebi SERVER_JOIN. Backup ID %d adicionado!\n", new_id);
-            }
-            free(args);
-            break;
+                    sendto(sockfd, &resp, sizeof(resp), 0, (struct sockaddr *)&args->client_addr, args->addr_len);
 
-        case COORDINATOR:
-                if ((uint32_t)my_id > args->req_packet.seqn) {
-                    printf("[BULLY] Recebi COORDINATOR de ID %d (Sou %d). Não aceito! Iniciando eleição.\n", 
-                           args->req_packet.seqn, my_id);
-                    
-                    start_election(sockfd); 
-                } 
-                else {
-                    current_leader_id = args->req_packet.leader.leader_id;
-                    num_servers = args->req_packet.leader.nr_servers;
-                    
-                    memcpy(server_list, args->req_packet.leader.servers, sizeof(server_list));
-                    
-                    printf("[INFO] Novo líder reconhecido e aceito: ID %d\n", current_leader_id);
+                    // Envia a tabela para o novo backup
+                    packet rep_pkt;
+                    memset(&rep_pkt, 0, sizeof(rep_pkt));
+                    rep_pkt.type = REP_UPDATE;
+                    rep_pkt.seqn = num_transactions;
+                    rep_pkt.rep.num_clients = num_clients;
+                    rep_pkt.rep.num_transactions = num_transactions;
+                    rep_pkt.rep.total_transferred = total_transferred;
+                    rep_pkt.rep.total_balance = total_balance;
+                    memcpy(rep_pkt.rep.client_table, client_table, sizeof(client_table));
+
+                    sendto(sockfd, &rep_pkt, sizeof(rep_pkt), 0, (struct sockaddr *)&args->client_addr, args->addr_len);
+
+                    // Informa os outros backups sobre o novo servidor
+                    for (int i = 0; i < num_servers; i++)
+                    {
+                        if (server_list[i].id == my_id || server_list[i].id == backup_id)
+                            continue;
+
+                        sendto(sockfd, &resp, sizeof(resp), 0,
+                            (struct sockaddr *)&server_list[i].addr, sizeof(struct sockaddr_in));
+                    }
+
+                    printf("[LIDER] Informei minha liderança para o ID %d\n", args->req_packet.seqn);
                 }
                 free(args);
                 break;
 
-        case DESC:
-            if (my_id == current_leader_id)
-            {
-                handle_discovery(sockfd, &args->client_addr, args->addr_len);
-                printf("[LIDER] Respondi a descoberta de um cliente.\n");
-            }
-            free(args);
-            break;
-
-        case REQ:
-            if (my_id == current_leader_id)
-            {
-                pthread_t thread_id;
-                if (pthread_create(&thread_id, NULL, process_request_thread, (void *)args) != 0)
+            case SERVER_JOIN:
+                if (my_id == current_leader_id)
                 {
-                    perror("pthread_create failed");
-                    free(args);
-                    continue;
+                    int new_id = args->req_packet.send_new.new_server.id;
+                    struct sockaddr_in new_addr = args->client_addr;
+                    add_peer(new_id, new_addr);
+                    printf("[LIDER] Recebi SERVER_JOIN. Backup ID %d adicionado!\n", new_id);
                 }
-                pthread_detach(thread_id);
-            }
-            else
-            {
                 free(args);
-            }
-            break;
+                break;
 
-        case REP_UPDATE:
-            if (my_id != current_leader_id)
-            {
-                pthread_mutex_lock(&data_mutex);
+            case COORDINATOR:
+                if (my_id > args->req_packet.leader.leader_id) {
+                    printf("[BULLY] Recebi COORDINATOR de ID %d (Sou %d). Iniciando eleição!\n", args->req_packet.leader.leader_id, my_id);
+                    start_election(sockfd);
+                } else {
+                    handle_coordinator_message(&args->req_packet);
+                }
+                free(args);
+                break;
 
-                memcpy(client_table, args->req_packet.rep.client_table, sizeof(client_table));
-                num_transactions = args->req_packet.rep.num_transactions;
-                total_transferred = args->req_packet.rep.total_transferred;
-                total_balance = args->req_packet.rep.total_balance;
+            case DESC:
+                if (my_id == current_leader_id)
+                {
+                    handle_discovery(sockfd, &args->client_addr, args->addr_len);
+                    printf("[LIDER] Respondi a descoberta de um cliente.\n");
+                }
+                free(args);
+                break;
 
-                printf("[BACKUP] Sincronizado com o Líder (Transação %d)\n", args->req_packet.seqn);
-                pthread_mutex_unlock(&data_mutex);
-            }
-            free(args);
-            break;
+            case REQ:
+                if (my_id == current_leader_id)
+                {
+                    pthread_t thread_id;
+                    if (pthread_create(&thread_id, NULL, process_request_thread, (void *)args) != 0)
+                    {
+                        perror("pthread_create failed");
+                        free(args);
+                        continue;
+                    }
+                    pthread_detach(thread_id);
+                }
+                else
+                {
+                    free(args);
+                }
+                break;
 
-        case ELECTION:
-            if ((int)args->req_packet.seqn < my_id)
-            {
-                printf("[ELEICAO] Recebi desafio do ID %d (Menor que eu). Respondendo...\n", args->req_packet.seqn);
+            case REP_UPDATE:
+                if (my_id != current_leader_id)
+                {
+                    pthread_mutex_lock(&data_mutex);
 
-                packet resp;
-                memset(&resp, 0, sizeof(resp));
-                resp.type = ELECTION; // Funciona como um "OK"
-                resp.seqn = my_id;
-                sendto(sockfd, &resp, sizeof(resp), 0, (struct sockaddr *)&args->client_addr, args->addr_len);
+                    memcpy(client_table, args->req_packet.rep.client_table, sizeof(client_table));
+                    num_transactions = args->req_packet.rep.num_transactions;
+                    total_transferred = args->req_packet.rep.total_transferred;
+                    total_balance = args->req_packet.rep.total_balance;
 
-                start_election(sockfd);
-            }
-            else
-            {
-                printf("[ELEICAO] Recebi desafio de ID %d (Maior). Aguardando ele assumir.\n", args->req_packet.seqn);
-            }
-            free(args);
-            break;
+                    printf("[BACKUP] Sincronizado com o Líder (Transação %d)\n", args->req_packet.seqn);
+                    pthread_mutex_unlock(&data_mutex);
+                }
+                free(args);
+                break;
 
-        case PING:
-            handle_ping(&args->req_packet, &args->client_addr);
-            free(args);
-            break;
+            case ELECTION:
+                handle_election_message(sockfd, &args->req_packet, &args->client_addr);
+                free(args);
+                break;
 
-        default:
-            break;
+            case ANSWER:
+                handle_answer_message(&args->req_packet);
+                free(args);
+                break;
+
+            case PING:
+                handle_ping(&args->req_packet, &args->client_addr);
+                free(args);
+                break;
+
+            default:
+                break;
         }
     }
 
