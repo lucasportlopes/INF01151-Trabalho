@@ -7,7 +7,7 @@ CLIENT_DIR = client
 BUILD_DIR  = build
 
 # Sources
-SERVER_SRCS = $(SERVER_DIR)/server.c $(SERVER_DIR)/interface.c $(SERVER_DIR)/discovery.c $(SERVER_DIR)/processing.c
+SERVER_SRCS = $(SERVER_DIR)/server.c $(SERVER_DIR)/interface.c $(SERVER_DIR)/discovery.c $(SERVER_DIR)/processing.c $(SERVER_DIR)/replication.c
 CLIENT_SRCS = $(CLIENT_DIR)/client.c $(CLIENT_DIR)/interface.c $(CLIENT_DIR)/discovery.c $(CLIENT_DIR)/processing.c
 
 # Targets (binaries go inside build/)

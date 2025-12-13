@@ -1,4 +1,5 @@
 #include "processing.h"
+#include "replication.h"
 #include <arpa/inet.h>
 #include <errno.h>
 #include <stdio.h>
@@ -6,9 +7,12 @@
 #include <string.h>
 
 // Tabela temporária de clientes para simulação
-#define MAX_CLIENTS 10
-static client_t client_table[MAX_CLIENTS];
-static int num_clients = 0;
+
+extern client_t client_table[MAX_CLIENTS];
+extern int num_clients;
+extern int num_transactions;
+extern int total_transferred;
+extern int total_balance;
 extern pthread_mutex_t data_mutex;
 
 void* process_request_thread(void* args) {
@@ -103,6 +107,8 @@ void handle_request(int sockfd, const struct sockaddr_in *client_addr, socklen_t
             source_client->last_req_id = req_packet->seqn;
             
             log_request(client_ip_str, dest_ip_str, req_packet->seqn, req_packet->req.value, num_transactions, total_transferred, total_balance);
+
+            propagate_state_to_backups(sockfd);
         }
     }
 
