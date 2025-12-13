@@ -109,31 +109,11 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    /*
     if (sendto(sockfd, &pkt, sizeof(pkt), 0, (struct sockaddr *)&broadcast_addr, sizeof(broadcast_addr)) < 0) {
         perror("sendto failed");
         close(sockfd);
         return -1;
     }
-    */
-
-    // --- GAMBIARRA PARA LOCALHOST (Varre portas 4000 a 4005) ---
-    printf("[STARTUP] Procurando líder nas portas vizinhas...\n");
-
-    for (int p = 4000; p <= 4005; p++)
-    {
-        if (p == port)
-            continue;
-
-        struct sockaddr_in target;
-        memset(&target, 0, sizeof(target));
-        target.sin_family = AF_INET;
-        target.sin_port = htons(p);
-        target.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-
-        sendto(sockfd, &pkt, sizeof(pkt), 0, (struct sockaddr *)&target, sizeof(target));
-    }
-    // -----------------------------------------------------------
 
     // Timeout de 2 segundos para esperar respostas
     struct timeval timeout;
