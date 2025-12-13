@@ -9,6 +9,8 @@ int num_servers = 0;
 int num_transactions = 0;
 int total_transferred = 0;
 int total_balance = 0;
+client_t client_table[MAX_CLIENTS]; 
+int num_clients = 0;
 replica_t server_list[MAX_SERVERS];
 server_role_t current_role = REPLICA_SECUNDARIO;
 pthread_mutex_t data_mutex;
@@ -308,6 +310,23 @@ int main(int argc, char *argv[])
                     start_election(sockfd);
                 } else {
                     handle_coordinator_message(&args->req_packet);
+                    reset_health_timers();
+
+                    if (current_role == REPLICA_SECUNDARIO) {
+                        packet join_pkt;
+                        memset(&join_pkt, 0, sizeof(join_pkt));
+                        join_pkt.type = SERVER_JOIN;
+                        join_pkt.seqn = my_id;
+                        join_pkt.send_new.new_server.id = my_id;
+                        join_pkt.send_new.new_server.addr = server_addr;
+
+                        // Envio direto para quem me mandou o COORDINATOR (o Líder)
+                        // args->client_addr contém o endereço de quem enviou o pacote COORDINATOR
+                        sendto(sockfd, &join_pkt, sizeof(join_pkt), 0, 
+                              (struct sockaddr *)&args->client_addr, args->addr_len);
+                              
+                        printf("[SERVER] Enviei SERVER_JOIN forçado para o Líder ID %d\n", args->req_packet.leader.leader_id);
+                    }
                 }
                 free(args);
                 break;
@@ -341,17 +360,8 @@ int main(int argc, char *argv[])
 
             case REP_UPDATE:
                 if (my_id != current_leader_id)
-                {
-                    pthread_mutex_lock(&data_mutex);
-
-                    memcpy(client_table, args->req_packet.rep.client_table, sizeof(client_table));
-                    num_transactions = args->req_packet.rep.num_transactions;
-                    total_transferred = args->req_packet.rep.total_transferred;
-                    total_balance = args->req_packet.rep.total_balance;
-
-                    printf("[BACKUP] Sincronizado com o Líder (Transação %d)\n", args->req_packet.seqn);
-                    pthread_mutex_unlock(&data_mutex);
-                }
+                    handle_replication_update(&args->req_packet, sockfd, &args->client_addr);
+                printf("[REPLICATION] Recebi transação número %d\n", args->req_packet.seqn);
                 free(args);
                 break;
 

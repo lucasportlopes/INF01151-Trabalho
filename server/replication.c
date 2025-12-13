@@ -279,6 +279,10 @@ void promote_to_primary(int sockfd) {
     printf("[ELECTION] Anúncios enviados: %d\n", sent_count);
     printf("[ELECTION] Pronto para processar requisições\n");
     printf("[ELECTION] =======================================\n");
+
+    pthread_mutex_lock(&data_mutex);
+    propagate_state_to_backups(sockfd);
+    pthread_mutex_unlock(&data_mutex);
 }
 
 /**
@@ -295,9 +299,8 @@ void propagate_state_to_backups(int sockfd) {
     memset(&rep_pkt, 0, sizeof(rep_pkt));
     rep_pkt.type = REP_UPDATE;
     
-    pthread_mutex_lock(&data_mutex);
-    
     // Preenche mensagem de replicação
+    rep_pkt.seqn = num_transactions;
     rep_pkt.rep.num_clients = num_clients;
     rep_pkt.rep.num_transactions = num_transactions;
     rep_pkt.rep.total_transferred = total_transferred;
@@ -307,8 +310,6 @@ void propagate_state_to_backups(int sockfd) {
     for (int i = 0; i < MAX_CLIENTS; i++) {
         rep_pkt.rep.client_table[i] = client_table[i];
     }
-    
-    pthread_mutex_unlock(&data_mutex);
     
     // Envia para todos os backups
     int sent_count = 0;
@@ -451,6 +452,12 @@ void* ping_monitor_thread(void* arg) {
             if (server_list[i].id == my_id) {
                 continue;
             }
+
+            if (server_health[i].last_ping_received == 0) {
+                server_health[i].last_ping_received = now;
+                server_health[i].is_alive = 1;
+                continue; // Pula a verificação de morte nessa rodada
+            }
             
             time_t elapsed = now - server_health[i].last_ping_received;
             
@@ -552,4 +559,17 @@ void init_ping_system(int sockfd) {
     pthread_detach(monitor_tid);
     
     printf("[PING] Sistema de ping inicializado com sucesso\n");
+}
+
+/**
+ * Reseta os timers de saúde dos servidores (usado após eleição)
+ */
+void reset_health_timers() {
+    pthread_mutex_lock(&health_mutex);
+    for (int i = 0; i < MAX_SERVERS; i++) {
+        server_health[i].last_ping_received = time(NULL);
+        server_health[i].is_alive = 1;
+    }
+    pthread_mutex_unlock(&health_mutex);
+    printf("[DEBUG] Timers de saúde resetados.\n");
 }

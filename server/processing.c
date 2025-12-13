@@ -8,8 +8,11 @@
 
 // Tabela temporária de clientes para simulação
 
-client_t client_table[MAX_CLIENTS];
-int num_clients = 0;
+extern client_t client_table[MAX_CLIENTS];
+extern int num_clients;
+extern int num_transactions;
+extern int total_transferred;
+extern int total_balance;
 extern pthread_mutex_t data_mutex;
 
 void* process_request_thread(void* args) {
@@ -50,8 +53,6 @@ client_t* find_client_by_ip(uint32_t ip_addr) {
     }
     return NULL;
 }
-
-
 
 void handle_request(int sockfd, const struct sockaddr_in *client_addr, socklen_t addr_len, const packet *req_packet) {
     pthread_mutex_lock(&data_mutex);

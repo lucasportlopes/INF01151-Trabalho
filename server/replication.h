@@ -20,5 +20,6 @@ void* ping_sender_thread(void* arg);
 void* ping_monitor_thread(void* arg);
 void handle_ping(const packet* pkt, const struct sockaddr_in* sender_addr);
 void init_ping_system(int sockfd);
+void reset_health_timers();
 
 #endif // REPLICATION_H
