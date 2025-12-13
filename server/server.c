@@ -152,26 +152,21 @@ int main(int argc, char *argv[])
             
             for (int i = 0; i < received_count; i++) {
                 replica_t known_server = resp_pkt.leader.servers[i];
-                // Adiciono todos (menos eu mesmo, pra não duplicar)
                 if (known_server.id != my_id) {
                     add_peer(known_server.id, known_server.addr);
                 }
             }
 
-            // Usa a função de promoção (replication.c) para avisar todo mundo (incluindo o antigo líder)
-            // Isso envia COORDINATOR para todos
             promote_to_primary(sockfd); 
         } 
-        // --- Caso normal: O líder encontrado é maior ou igual, aceito ele ---
         else {
             current_leader_id = found_leader_id;
             num_servers = resp_pkt.leader.nr_servers;
             memcpy(server_list, resp_pkt.leader.servers, sizeof(server_list));
-            current_role = REPLICA_SECUNDARIO; // Garante que sou backup
+            current_role = REPLICA_SECUNDARIO;
             
             printf("[STARTUP] Líder legítimo encontrado: ID %d\n", current_leader_id);
 
-            // Me apresento ao Líder (SERVER_JOIN)
             if (current_leader_id != my_id) {
                 packet join_pkt;
                 memset(&join_pkt, 0, sizeof(join_pkt));
@@ -180,9 +175,7 @@ int main(int argc, char *argv[])
                 join_pkt.send_new.new_server.id = my_id;
                 join_pkt.send_new.new_server.addr = server_addr;
 
-                // Envia para o endereço de onde veio a resposta
                 sendto(sockfd, &join_pkt, sizeof(join_pkt), 0, (struct sockaddr *)&leader_addr, leader_addr_len);
-                printf("[STARTUP] Enviei SERVER_JOIN para o Líder ID %d\n", current_leader_id);
             }
         }
     }
@@ -233,8 +226,6 @@ int main(int argc, char *argv[])
 
                     add_peer(backup_id, args->client_addr);
                     printf("[LIDER] Backup registrado na lista: ID %d\n", backup_id);
-
-                    // Responde com COORDINATOR e lista de servidores
                     packet resp;
                     memset(&resp, 0, sizeof(resp));
                     resp.type = COORDINATOR;
@@ -245,7 +236,6 @@ int main(int argc, char *argv[])
 
                     sendto(sockfd, &resp, sizeof(resp), 0, (struct sockaddr *)&args->client_addr, args->addr_len);
 
-                    // Envia a tabela para o novo backup
                     packet rep_pkt;
                     memset(&rep_pkt, 0, sizeof(rep_pkt));
                     rep_pkt.type = REP_UPDATE;
@@ -258,7 +248,6 @@ int main(int argc, char *argv[])
 
                     sendto(sockfd, &rep_pkt, sizeof(rep_pkt), 0, (struct sockaddr *)&args->client_addr, args->addr_len);
 
-                    // Informa os outros backups sobre o novo servidor
                     for (int i = 0; i < num_servers; i++)
                     {
                         if (server_list[i].id == my_id || server_list[i].id == backup_id)
@@ -299,13 +288,10 @@ int main(int argc, char *argv[])
                         join_pkt.seqn = my_id;
                         join_pkt.send_new.new_server.id = my_id;
                         join_pkt.send_new.new_server.addr = server_addr;
-
-                        // Envio direto para quem me mandou o COORDINATOR (o Líder)
-                        // args->client_addr contém o endereço de quem enviou o pacote COORDINATOR
                         sendto(sockfd, &join_pkt, sizeof(join_pkt), 0, 
                               (struct sockaddr *)&args->client_addr, args->addr_len);
                               
-                        printf("[SERVER] Enviei SERVER_JOIN forçado para o Líder ID %d\n", args->req_packet.leader.leader_id);
+                        printf("[SERVER] Enviei SERVER_JOIN para o Líder ID %d\n", args->req_packet.leader.leader_id);
                     }
                 }
                 free(args);
